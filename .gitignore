@@ -1,0 +1,18 @@
+# Environment variables
+.env
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+ENV/
+
+# Generated images
+wordle_images/
+
+# Data files (optional - you might want to keep these for development)
+# data/

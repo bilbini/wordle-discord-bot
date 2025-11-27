@@ -1,0 +1,67 @@
+{
+  "1438669310787715225": {
+    "answer": "gaily",
+    "difficulty": "hard",
+    "maxGuesses": 6,
+    "guesses": [
+      "alone"
+    ],
+    "channel_id": "1443111465182564425",
+    "created_at": 1764165407.9046617,
+    "is_hard_mode": true,
+    "green_constraints": {},
+    "yellow_constraints": {
+      "a": [
+        0
+      ],
+      "l": [
+        1
+      ]
+    },
+    "guess_results": [
+      {
+        "statuses": [
+          "yellow",
+          "yellow",
+          "grey",
+          "grey",
+          "grey"
+        ],
+        "is_correct": false,
+        "is_finished": false,
+        "error": ""
+      }
+    ],
+    "1443111465182564425": {
+      "answer": "cider",
+      "difficulty": "hard",
+      "maxGuesses": 6,
+      "guesses": [
+        "least"
+      ],
+      "channel_id": "1443111465182564425",
+      "created_at": 1764195313.5267475,
+      "is_hard_mode": true,
+      "green_constraints": {},
+      "yellow_constraints": {
+        "e": [
+          1
+        ]
+      },
+      "guess_results": [
+        {
+          "statuses": [
+            "grey",
+            "yellow",
+            "grey",
+            "grey",
+            "grey"
+          ],
+          "is_correct": false,
+          "is_finished": false,
+          "error": ""
+        }
+      ]
+    }
+  }
+}
