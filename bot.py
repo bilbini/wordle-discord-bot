@@ -32,8 +32,31 @@ class DiscordWordleBot:
         @self.bot.event
         async def on_ready():
             print(f"Logged in as {self.bot.user}")
+            
+            # Sync slash commands to all guilds
+            try:
+                synced = await self.bot.tree.sync()
+                print(f"Synced {len(synced)} slash commands globally")
+                
+                # Also sync to each guild for faster availability
+                for guild in self.bot.guilds:
+                    await self.bot.tree.sync(guild=guild)
+                    print(f"Synced commands to guild: {guild.name}")
+                    
+            except Exception as e:
+                print(f"Failed to sync commands: {e}")
+            
             print("Slash commands are ready!")
             self._build_letter_emoji_cache()
+        
+        @self.bot.event
+        async def on_guild_join(guild):
+            """Sync commands when bot joins a new guild"""
+            try:
+                await self.bot.tree.sync(guild=guild)
+                print(f"Synced commands to new guild: {guild.name}")
+            except Exception as e:
+                print(f"Failed to sync commands to new guild {guild.name}: {e}")
         
         @self.bot.event
         async def on_message(message):
@@ -259,63 +282,80 @@ class DiscordWordleBot:
         return "\n".join(rendered_rows)
 
     async def _handle_status_command(self, guild_id, channel, message_or_interaction=None):
-        """Handle wordle status command and show a rich embed status view."""
-        # Look up active game for this channel
+        """Handle wordle status command"""
         game_data = storage.get_channel_game(guild_id, channel.id)
         if game_data is None:
-            await self._send_response(
-                channel,
-                "This channel has no active Wordle game. Start one with `/wordle-new` or by typing `new wordle`.",
-                message_or_interaction,
-            )
+            text = "This channel has no active Wordle game. Start one with `/wordle-new` or `new wordle`."
+            if hasattr(message_or_interaction, "response") and hasattr(message_or_interaction.response, "send_message"):
+                await message_or_interaction.response.send_message(text)
+            else:
+                await channel.send(text)
             return
 
         game_state = GameState.from_dict(game_data)
 
-        # ── Build the main embed ─────────────────────────────────────────────
-        embed = discord.Embed(
-            title="Previously guessed words",
-            color=discord.Color.green(),
-        )
+        # Build the "Previously guessed words" description using emoji rows
+        if game_state.guesses:
+            lines = []
+            for idx, guess_result in enumerate(game_state.guess_results):
+                guess_word = game_state.guesses[idx]
+                emoji_row = self._render_emoji_row(guess_word, guess_result.statuses)
+                lines.append(f"{idx + 1}. {emoji_row}")
+            description = "\n".join(lines)
+        else:
+            description = "No guesses yet!"
 
-        # 1) Guess history block (numbered list of guesses)
-        history_block = self._render_guess_history_block(game_state)
-        embed.description = history_block
+        # Build keyboard image based on current keyboard state
+        keyboard_state = game_state.get_keyboard_state()
 
-        # 2) Keyboard block underneath, as its own field
-        keyboard_block = self._render_keyboard_block(game_state)
-        embed.add_field(
-            name="Keyboard",
-            value=keyboard_block,
-            inline=False,
-        )
+        image_path = None
+        try:
+            image_path = image_generator.generate_keyboard_image(keyboard_state)
+            with open(image_path, "rb") as f:
+                file = discord.File(f, filename="wordle_keyboard.png")
 
-        # 3) Game info: difficulty + guesses summary
-        guesses_made = len(game_state.guesses)
-        guesses_remaining = game_state.max_guesses - guesses_made
+            embed = discord.Embed(
+                title="Previously guessed words",
+                description=description,
+                color=discord.Color.green(),
+            )
+            embed.set_image(url="attachment://wordle_keyboard.png")
+            embed.set_footer(
+                text="Wafflers Remastered (powered by Mafia Remastered) © 2025 – Version: 2.3.0"
+            )
 
-        embed.add_field(
-            name="Game Info",
-            value=(
-                f"Difficulty: **{game_state.difficulty.upper()}**\n"
-                f"Guesses made: **{guesses_made}**\n"
-                f"Guesses remaining: **{guesses_remaining}**"
-            ),
-            inline=False,
-        )
+            if hasattr(message_or_interaction, "response") and hasattr(message_or_interaction.response, "send_message"):
+                await message_or_interaction.response.send_message(embed=embed, file=file)
+            else:
+                await channel.send(embed=embed, file=file)
 
-        # 4) Footer, similar to the reference screenshot
-        # You can adjust the text to match your bot branding / version.
-        embed.set_footer(
-            text="Wordle Corner – Version: 1.0.0",
-        )
+        except Exception as e:
+            # Fallback to a simple text-based embed if image generation fails
+            print(f"Status keyboard image generation failed: {e}")
 
-        # Send embed as the response (works for both messages and interactions)
-        await self._send_response(
-            channel,
-            embed=embed,
-            message_or_interaction=message_or_interaction,
-        )
+            keyboard_display = WordleGame.format_keyboard_display(game_state.get_keyboard_state())
+            fallback_embed = discord.Embed(
+                title="Wordle Status",
+                color=discord.Color.blue(),
+                description=description,
+            )
+            fallback_embed.add_field(
+                name="Keyboard",
+                value=keyboard_display,
+                inline=False,
+            )
+
+            if hasattr(message_or_interaction, "response") and hasattr(message_or_interaction.response, "send_message"):
+                await message_or_interaction.response.send_message(embed=fallback_embed)
+            else:
+                await channel.send(embed=fallback_embed)
+
+        finally:
+            if image_path and os.path.exists(image_path):
+                try:
+                    os.remove(image_path)
+                except Exception as e:
+                    print(f"Failed to delete status image file {image_path}: {e}")
 
     async def _handle_points_command(self, guild_id, user_id, channel, message_or_interaction=None):
         """Handle wordle points command"""
@@ -379,10 +419,14 @@ class DiscordWordleBot:
 
     async def _handle_help_command(self, channel, message_or_interaction=None):
         """Handle wordle help command"""
-        help_text = """
-**Wordle Bot Commands:**
+        embed = discord.Embed(
+            title="Wordle Bot Commands",
+            color=discord.Color.blue(),
+            description="Here are all the commands you can use to play Wordle:"
+        )
 
-**Text Commands:**
+        # Text Commands
+        text_commands = """
 `new wordle` - Start a new Wordle game (medium difficulty)
 `new wordle easy` - Start with 8 guesses
 `new wordle medium` - Start with 6 guesses
@@ -393,8 +437,11 @@ class DiscordWordleBot:
 `wordle top` - Show top players in this server
 `wordle quit` - Quit the current game
 `wordle help` - Show this help message
+"""
+        embed.add_field(name="Text Commands", value=text_commands, inline=False)
 
-**Slash Commands:**
+        # Slash Commands
+        slash_commands = """
 `/wordle-new` - Start a new Wordle game with difficulty selection
 `/wordle-guess <word>` - Make a guess (5-letter word)
 `/wordle-status` - Show current game status
@@ -402,15 +449,22 @@ class DiscordWordleBot:
 `/wordle-top` - Show top players in this server
 `/wordle-quit` - Quit the current game
 `/wordle-help` - Show this help message
+"""
+        embed.add_field(name="Slash Commands", value=slash_commands, inline=False)
 
-**Game Rules:**
+        # Game Rules
+        game_rules = """
 - One active game per server
 - Everyone can guess
 - 5-letter words only
 - Official NYT Wordle word list
 - Points awarded for wins with bonus for fewer guesses
 """
-        await self._send_response(channel, help_text, message_or_interaction)
+        embed.add_field(name="Game Rules", value=game_rules, inline=False)
+
+        embed.set_footer(text="Wafflers Remastered (powered by Mafia Remastered) © 2025 – Version: 2.3.0")
+
+        await self._send_response(channel, embed=embed, message_or_interaction=message_or_interaction)
 
     async def _send_response(self, channel, content=None, message_or_interaction=None, embed=None, file=None):
         """Helper method to send responses for both regular messages and slash commands"""
@@ -436,12 +490,12 @@ class DiscordWordleBot:
         game_data = storage.get_channel_game(guild_id, channel.id)
         if game_data is None:
             return  # Ignore guesses if no active game in channel
-        
+
         game_state = GameState.from_dict(game_data)
-        
+
         # Apply the guess
         result = game_state.apply_guess(guess)
-        
+
         if result.error != "":
             # Map error messages to the specific formats requested
             if "already guessed" in result.error:
@@ -451,15 +505,21 @@ class DiscordWordleBot:
             else:
                 await channel.send(result.error)
             return
-        
+
         # Update storage with new game state
         storage.save_channel_game(guild_id, channel.id, game_state.to_dict())
-        
-        # Generate and send guess image
+
+        # If the game is finished AND this guess is correct, we skip the per-guess
+        # image and directly show the final history image via _handle_game_completion.
+        if result.is_finished and result.is_correct:
+            await self._handle_game_completion(game_state, guild_id, user_id, channel, True)
+            return
+
+        # For all other cases, show the single-row guess image
         image_path = None
         try:
             image_path = image_generator.generate_guess_image(guess, result.statuses)
-            with open(image_path, 'rb') as f:
+            with open(image_path, "rb") as f:
                 picture = discord.File(f, filename=f"wordle_guess_{guess}.png")
             await channel.send(file=picture)
         except Exception as e:
@@ -474,8 +534,8 @@ class DiscordWordleBot:
                     os.remove(image_path)
                 except Exception as e:
                     print(f"Failed to delete image file {image_path}: {e}")
-        
-        # Handle game completion
+
+        # If the game is finished (loss or max guesses), show final history
         if result.is_finished:
             await self._handle_game_completion(game_state, guild_id, user_id, channel, result.is_correct)
 
@@ -540,14 +600,18 @@ class DiscordWordleBot:
 
             # Update user score
             current_score = storage.get_user_score(guild_id, user_id)
+            new_points = current_score["points"] + points_earned
+            new_games_won = current_score["gamesWon"] + 1
+            new_games_played = current_score["gamesPlayed"] + 1
+
             new_score_data = {
-                "points": current_score["points"] + points_earned,
-                "gamesWon": current_score["gamesWon"] + 1,
-                "gamesPlayed": current_score["gamesPlayed"] + 1,
+                "points": new_points,
+                "gamesWon": new_games_won,
+                "gamesPlayed": new_games_played,
             }
             storage.update_user_score(guild_id, user_id, new_score_data)
 
-            # Win message text
+            # Build the win text
             if game_state.difficulty == "hard":
                 win_message = (
                     f"Correct! You guessed it in {guesses_used} tries. "
@@ -559,52 +623,89 @@ class DiscordWordleBot:
                     f"You gained {points_earned} points!"
                 )
 
-            # Use the last guess statuses for the emoji row (all green on a win)
-            last_statuses = []
-            if game_state.guess_results:
+            image_path = None
+            try:
+                # Generate single word image (the final guess)
+                last_guess = game_state.guesses[-1]
                 last_statuses = game_state.guess_results[-1].statuses
+                image_path = image_generator.generate_guess_image(last_guess, last_statuses)
+                with open(image_path, "rb") as f:
+                    picture = discord.File(f, filename="wordle_final.png")
 
-            emoji_row = self._render_emoji_row(answer, last_statuses)
+                dict_url = f"https://www.merriam-webster.com/dictionary/{answer}"
 
-            # Dictionary button
-            dict_url = f"https://www.merriam-webster.com/dictionary/{answer}"
-            view = discord.ui.View()
-            view.add_item(
-                discord.ui.Button(
-                    label="Dictionary",
-                    style=discord.ButtonStyle.link,
-                    url=dict_url,
+                view = discord.ui.View()
+                view.add_item(
+                    discord.ui.Button(
+                        label="Dictionary",
+                        style=discord.ButtonStyle.link,
+                        url=dict_url,
+                    )
                 )
-            )
 
-            await channel.send(f"{win_message}\n{emoji_row}", view=view)
+                # Send text message with photo and button (no embed)
+                await channel.send(win_message, file=picture, view=view)
+
+            except Exception as e:
+                # Fallback: text-only message
+                print(f"Final guess image generation failed: {e}")
+                dict_url = f"https://www.merriam-webster.com/dictionary/{answer}"
+                win_message += f"\n\nDictionary: {dict_url}"
+                await channel.send(win_message)
+            finally:
+                if image_path and os.path.exists(image_path):
+                    try:
+                        os.remove(image_path)
+                    except Exception as e:
+                        print(f"Failed to delete image file {image_path}: {e}")
 
         else:
-            # Loss: only gamesPlayed increases
+            # Loss: update only gamesPlayed
             current_score = storage.get_user_score(guild_id, user_id)
+            new_games_played = current_score["gamesPlayed"] + 1
+
             new_score_data = {
                 "points": current_score["points"],
                 "gamesWon": current_score["gamesWon"],
-                "gamesPlayed": current_score["gamesPlayed"] + 1,
+                "gamesPlayed": new_games_played,
             }
             storage.update_user_score(guild_id, user_id, new_score_data)
 
-            # Show the correct word as all-green row
-            statuses = ["green"] * len(answer)
-            emoji_row = self._render_emoji_row(answer, statuses)
+            image_path = None
+            try:
+                # Generate single word image showing the answer as all green
+                statuses = ["green"] * len(answer)
+                image_path = image_generator.generate_guess_image(answer, statuses)
+                with open(image_path, "rb") as f:
+                    picture = discord.File(f, filename="wordle_final.png")
 
-            dict_url = f"https://www.merriam-webster.com/dictionary/{answer}"
-            view = discord.ui.View()
-            view.add_item(
-                discord.ui.Button(
-                    label="Dictionary",
-                    style=discord.ButtonStyle.link,
-                    url=dict_url,
+                loss_message = f"😞 Game over! The word was **{answer.upper()}**."
+                dict_url = f"https://www.merriam-webster.com/dictionary/{answer}"
+
+                view = discord.ui.View()
+                view.add_item(
+                    discord.ui.Button(
+                        label="Dictionary",
+                        style=discord.ButtonStyle.link,
+                        url=dict_url,
+                    )
                 )
-            )
 
-            loss_message = f"😞 Game over! The word was **{answer.upper()}**."
-            await channel.send(f"{loss_message}\n{emoji_row}", view=view)
+                # Send text message with photo and button (no embed)
+                await channel.send(loss_message, file=picture, view=view)
+
+            except Exception as e:
+                print(f"Final guess image generation failed (loss): {e}")
+                dict_url = f"https://www.merriam-webster.com/dictionary/{answer}"
+                loss_message = f"😞 Game over! The word was **{answer.upper()}**."
+                loss_message += f"\n\nDictionary: {dict_url}"
+                await channel.send(loss_message)
+            finally:
+                if image_path and os.path.exists(image_path):
+                    try:
+                        os.remove(image_path)
+                    except Exception as e:
+                        print(f"Failed to delete image file {image_path}: {e}")
 
         # Remove the completed game from storage
         storage.delete_channel_game(guild_id, channel.id)

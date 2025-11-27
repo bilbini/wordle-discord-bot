@@ -226,6 +226,93 @@ class WordleImageGenerator:
             game_state, filename, prefix="wordle_status"
         )
 
+    def generate_keyboard_image(self, keyboard_state, filename=None):
+        """
+        Generate a QWERTY keyboard image for the current game.
+
+        - Non-used letters: white keys
+        - Letters seen as grey/yellow: grey keys (no yellow color)
+        - Letters seen as green: green keys
+        """
+        # QWERTY layout
+        rows = [
+            "qwertyuiop",
+            "asdfghjkl",
+            "zxcvbnm",
+        ]
+
+        # Key geometry (smaller than main tiles)
+        key_width = 60
+        key_height = 80
+        gap = 8
+        margin_x = 20
+        margin_y = 20
+
+        max_row_len = max(len(r) for r in rows)
+        width = margin_x * 2 + max_row_len * key_width + (max_row_len - 1) * gap
+        height = margin_y * 2 + len(rows) * key_height + (len(rows) - 1) * gap
+
+        image = Image.new("RGB", (width, height), self.colors["bg"])
+        draw = ImageDraw.Draw(image)
+        font = self._get_font(int(key_height * 0.5), bold=True)
+
+        for row_index, row in enumerate(rows):
+            y0 = margin_y + row_index * (key_height + gap)
+
+            row_width = len(row) * key_width + (len(row) - 1) * gap
+            x_start = (width - row_width) // 2
+
+            for col_index, ch in enumerate(row):
+                x0 = x_start + col_index * (key_width + gap)
+
+                status = keyboard_state.get(ch, "unguessed")
+                status = (status or "").lower()
+
+                if status == "green":
+                    fill = self.colors["green"]
+                elif status in ("grey", "yellow"):
+                    # We only want grey here, no yellow color on the keyboard
+                    fill = self.colors["grey"]
+                else:
+                    # Non-used letters -> white background
+                    fill = self.colors["white"]
+
+                # Draw key rectangle
+                draw.rounded_rectangle(
+                    [x0, y0, x0 + key_width, y0 + key_height],
+                    radius=10,
+                    fill=fill,
+                )
+
+                # Draw letter centered on the key
+                letter = ch.upper()
+                cx = x0 + key_width // 2
+                cy = y0 + key_height // 2
+
+                try:
+                    draw.text(
+                        (cx, cy),
+                        letter,
+                        font=font,
+                        fill=self.colors["bg"],
+                        anchor="mm",
+                    )
+                except TypeError:
+                    # Fallback centering for older Pillow
+                    bbox = draw.textbbox((0, 0), letter, font=font)
+                    tw = bbox[2] - bbox[0]
+                    th = bbox[3] - bbox[1]
+                    tx = x0 + (key_width - tw) // 2
+                    ty = y0 + (key_height - th) // 2
+                    draw.text((tx, ty), letter, font=font, fill=self.colors["bg"])
+
+        if not filename:
+            filename = f"wordle_keyboard_{random.randint(1000, 9999)}.png"
+
+        filepath = os.path.join(self.images_dir, filename)
+        image.save(filepath, "PNG")
+        return filepath
+
     def cleanup_old_images(self, max_age_hours=24):
         """Clean up old image files to prevent disk space issues."""
         current_time = time.time()

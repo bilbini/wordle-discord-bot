@@ -72,7 +72,7 @@ class GameState:
         
         # Check if game is finished
         guesses_used = len(self.guesses)
-        if result.is_correct or guesses_used >= self.max_guesses:
+        if result.is_correct or (self.max_guesses > 0 and guesses_used >= self.max_guesses):
             result.is_finished = True
         
         self.guess_results.append(result)
@@ -250,7 +250,7 @@ class WordleGame:
     def _get_max_guesses(difficulty):
         """Get max guesses for a difficulty level"""
         if difficulty == "easy":
-            return 8
+            return 0  # 0 means unlimited guesses
         elif difficulty == "medium":
             return 6
         elif difficulty == "hard":
