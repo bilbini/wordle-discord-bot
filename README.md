@@ -1,16 +1,20 @@
 # Discord Wordle Bot in Python
 
-A production-ready Discord Wordle bot written in Python, featuring the same functionality as the Mojo version with simplified setup and deployment.
+A production-ready Discord Wordle bot written in Python, featuring rich embeds, custom emojis, and Docker support.
 
 ## Features
 
 - **NYT-style Wordle gameplay** with official scoring rules
-- **Multiple difficulty levels**: Easy (8 guesses), Medium (6 guesses), Hard (6 guesses with hard mode)
+- **Multiple difficulty levels**: Easy (unlimited guesses), Medium (6 guesses), Hard (6 guesses with hard mode)
+- **Rich embeds** for status and help commands with custom emoji support
+- **Keyboard image generation** with QWERTY layout and color-coded keys
 - **Persistent scoring system** with JSON storage
 - **Interactive keyboard display** showing letter status
 - **Leaderboard system** with top player rankings
 - **Hard mode constraints** that enforce revealed letter usage
 - **Visual PNG images** for guesses and game history with colored boxes and letters
+- **Docker support** for easy deployment
+- **Automatic slash command registration** across servers
 
 ## Project Structure
 
@@ -225,23 +229,60 @@ sudo systemctl start wordle-bot
 
 ### Docker Deployment
 
-Create a `Dockerfile`:
+The project includes full Docker support with Dockerfile and docker-compose for easy deployment.
 
-```dockerfile
-FROM python:3.9-slim
+#### Using Docker Compose (Recommended)
 
-WORKDIR /app
-COPY . .
-RUN pip install -r requirements.txt
+1. **Set up environment variables**:
+   Copy `.env.example` to `.env` and add your Discord bot token:
+   ```bash
+   cp .env.example .env
+   # Edit .env and add: DISCORD_TOKEN=your_discord_bot_token_here
+   ```
 
-CMD ["python", "bot.py"]
-```
+2. **Build and run**:
+   ```bash
+   docker-compose up -d
+   ```
 
-Build and run:
-```bash
-docker build -t wordle-bot .
-docker run -d --name wordle-bot -v $(pwd)/data:/app/data -v $(pwd)/.env:/app/.env wordle-bot
-```
+3. **View logs**:
+   ```bash
+   docker-compose logs -f
+   ```
+
+4. **Stop the bot**:
+   ```bash
+   docker-compose down
+   ```
+
+#### Using Docker Directly
+
+1. **Build the image**:
+   ```bash
+   docker build -t wordle-bot .
+   ```
+
+2. **Run the container**:
+   ```bash
+   docker run -d \
+     --name wordle-bot \
+     -v $(pwd)/data:/app/data \
+     -v $(pwd)/wordle_images:/app/wordle_images \
+     -e DISCORD_TOKEN=your_discord_bot_token_here \
+     wordle-bot
+   ```
+
+#### Docker Compose Configuration
+
+The `docker-compose.yml` file includes:
+- Automatic restart on failure
+- Volume mounts for persistent data
+- Health checks
+- Environment variable support
+
+#### Environment Variables
+
+- `DISCORD_TOKEN` (required): Your Discord bot token from the developer portal
 
 ## Troubleshooting
 
