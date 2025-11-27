@@ -31,34 +31,47 @@
         "is_finished": false,
         "error": ""
       }
-    ],
-    "1443111465182564425": {
-      "answer": "miner",
+    ]
+  },
+  "1403110585599655936": {
+    "1443125284735025202": {
+      "answer": "prune",
+      "difficulty": "hard",
+      "maxGuesses": 6,
+      "guesses": [],
+      "channel_id": "1443125284735025202",
+      "created_at": 1764278719.5360808,
+      "is_hard_mode": true,
+      "green_constraints": {},
+      "yellow_constraints": {},
+      "guess_results": []
+    },
+    "1443125952518553643": {
+      "answer": "suave",
       "difficulty": "hard",
       "maxGuesses": 6,
       "guesses": [
         "alone"
       ],
-      "channel_id": "1443111465182564425",
-      "created_at": 1764269717.275275,
+      "channel_id": "1443125952518553643",
+      "created_at": 1764278740.2882874,
       "is_hard_mode": true,
-      "green_constraints": {},
+      "green_constraints": {
+        "4": "e"
+      },
       "yellow_constraints": {
-        "n": [
-          3
-        ],
-        "e": [
-          4
+        "a": [
+          0
         ]
       },
       "guess_results": [
         {
           "statuses": [
-            "grey",
-            "grey",
-            "grey",
             "yellow",
-            "yellow"
+            "grey",
+            "grey",
+            "grey",
+            "green"
           ],
           "is_correct": false,
           "is_finished": false,

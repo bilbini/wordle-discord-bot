@@ -1,62 +1,68 @@
 {
   "global": {
     "361067702804283394": {
-      "points": 5634,
-      "gamesWon": 8,
-      "gamesPlayed": 10
+      "points": 2823,
+      "gamesWon": 9,
+      "gamesPlayed": 13,
+      "totalGuesses": 5,
+      "firstAttemptGuesses": 0
     },
     "1298137386349367367": {
-      "points": 196,
-      "gamesWon": 13,
-      "gamesPlayed": 13
+      "points": 313,
+      "gamesWon": 23,
+      "gamesPlayed": 25,
+      "totalGuesses": 87,
+      "firstAttemptGuesses": 0
     },
     "1173434462323867660": {
-      "points": 128088,
+      "points": 64044,
       "gamesWon": 0,
       "gamesPlayed": 0
     },
     "715342984299937892": {
-      "points": 81532,
+      "points": 40766,
       "gamesWon": 0,
       "gamesPlayed": 0
     },
     "1156276224499384421": {
-      "points": 53790,
+      "points": 26895,
       "gamesWon": 0,
       "gamesPlayed": 0
     },
     "803674805857550346": {
-      "points": 46534,
+      "points": 23267,
       "gamesWon": 0,
       "gamesPlayed": 0
     },
     "459508442638319616": {
-      "points": 41918,
+      "points": 20959,
       "gamesWon": 0,
       "gamesPlayed": 0
     },
     "506228323102228494": {
-      "points": 28342,
+      "points": 14171,
       "gamesWon": 0,
       "gamesPlayed": 0
     },
     "1236759773089628190": {
-      "points": 7456,
-      "gamesWon": 0,
-      "gamesPlayed": 0
+      "points": 3876,
+      "gamesWon": 12,
+      "gamesPlayed": 12,
+      "totalGuesses": 58,
+      "firstAttemptGuesses": 0
     },
     "1269217319104680010": {
-      "points": 2846,
+      "points": 1423,
       "gamesWon": 0,
       "gamesPlayed": 0
     },
     "1358202678643130618": {
-      "points": 2515,
+      "points": 1258,
       "gamesWon": 0,
       "gamesPlayed": 0
     },
     "160870476913180673": {
-      "points": 22266,
+      "points": 11133,
       "gamesWon": 0,
       "gamesPlayed": 0
     }

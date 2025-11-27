@@ -250,14 +250,12 @@ class WordleGame:
     @staticmethod
     def _get_max_guesses(difficulty):
         """Get max guesses for a difficulty level"""
-        if difficulty == "easy":
+        if difficulty == "normal":
             return 0  # 0 means unlimited guesses
-        elif difficulty == "medium":
-            return 6
         elif difficulty == "hard":
             return 6
-        else:  # default to medium
-            return 6
+        else:  # default to normal
+            return 0
 
     @staticmethod
     def calculate_points(difficulty, guesses_used):
@@ -274,23 +272,23 @@ class WordleGame:
             }
             return hard_mode_points.get(guesses_used, 0)
         
-        # Original scoring for easy and medium modes
-        base_points = WordleGame._get_base_points(difficulty)
-        max_guesses = WordleGame._get_max_guesses(difficulty)
-        bonus_points = max_guesses - guesses_used
+        # Normal mode: 10 - (guesses_used - 1), minimum 0
+        if difficulty == "normal":
+            points = 10 - (guesses_used - 1)
+            return max(0, points)
         
-        return base_points + bonus_points
+        # Default to normal mode scoring
+        points = 10 - (guesses_used - 1)
+        return max(0, points)
 
     @staticmethod
     def _get_base_points(difficulty):
         """Get base points for a difficulty level"""
-        if difficulty == "easy":
-            return 5
-        elif difficulty == "medium":
+        if difficulty == "normal":
             return 10
         elif difficulty == "hard":
             return 15
-        else:  # default to medium
+        else:  # default to normal
             return 10
 
     @staticmethod

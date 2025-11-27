@@ -3,6 +3,7 @@
 import os
 import random
 import time
+import asyncio
 from PIL import Image, ImageDraw, ImageFont
 
 
@@ -287,8 +288,10 @@ class WordleImageGenerator:
                 if status == "green":
                     fill = self.colors["green"]
                     text_color = self.colors["white"]  # White text on green
-                elif status in ("grey", "yellow"):
-                    # We only want grey here, no yellow color on the keyboard
+                elif status == "yellow":
+                    fill = self.colors["yellow"]
+                    text_color = self.colors["white"]  # White text on yellow
+                elif status == "grey":
                     fill = self.colors["grey"]
                     text_color = self.colors["white"]  # White text on grey
                 else:
@@ -332,24 +335,27 @@ class WordleImageGenerator:
         image.save(filepath, "PNG")
         return filepath
 
-    def cleanup_old_images(self, max_age_hours=24):
-        """Clean up old image files to prevent disk space issues."""
-        current_time = time.time()
-        max_age_seconds = max_age_hours * 3600
-
+    def cleanup_all_images(self):
+        """Delete all images in the wordle_images folder at once."""
+        deleted_count = 0
         for filename in os.listdir(self.images_dir):
             if filename.endswith(".png"):
                 filepath = os.path.join(self.images_dir, filename)
                 try:
-                    file_age = current_time - os.path.getmtime(filepath)
-                except OSError:
-                    continue
+                    os.remove(filepath)
+                    deleted_count += 1
+                except OSError as e:
+                    print(f"Error deleting {filename}: {e}")
+        
+        if deleted_count > 0:
+            print(f"Deleted {deleted_count} images from wordle_images folder")
+        return deleted_count
 
-                if file_age > max_age_seconds:
-                    try:
-                        os.remove(filepath)
-                    except OSError:
-                        pass
+    async def start_periodic_cleanup(self):
+        """Start periodic cleanup of all images every 10 minutes."""
+        while True:
+            await asyncio.sleep(600)  # 10 minutes = 600 seconds
+            self.cleanup_all_images()
 
 
 # Global instance

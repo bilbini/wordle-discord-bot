@@ -34,6 +34,8 @@ class DiscordWordleBot:
             print(f"Logged in as {self.bot.user}")
             self._build_letter_emoji_cache()
             print("Bot is ready!")
+            # Start periodic image cleanup (every 10 minutes)
+            asyncio.create_task(image_generator.start_periodic_cleanup())
         
         @self.bot.event
         async def on_message(message):
@@ -52,12 +54,24 @@ class DiscordWordleBot:
         channel = message.channel
         
         # Handle commands
-        if content in ["new wordle", "new wordle easy", "new wordle medium", "new wordle hard"]:
+        if content in ["new wordle", "new wordle normal", "new wordle hard"]:
             await self._handle_new_wordle_command(content, guild_id, user_id, channel, message)
+        elif content.startswith("wordle points"):
+            # Check if there's a user mention
+            if message.mentions:
+                target_user_id = str(message.mentions[0].id)
+                await self._handle_points_command(guild_id, target_user_id, channel, message)
+            else:
+                await self._handle_points_command(guild_id, user_id, channel, message)
+        elif content.startswith("wordle stats"):
+            # Check if there's a user mention
+            if message.mentions:
+                target_user_id = str(message.mentions[0].id)
+                await self._handle_statistics_command(guild_id, target_user_id, channel, message)
+            else:
+                await self._handle_statistics_command(guild_id, user_id, channel, message)
         elif content == "wordle status":
             await self._handle_status_command(guild_id, channel)
-        elif content == "wordle points":
-            await self._handle_points_command(guild_id, user_id, channel)
         elif content == "wordle top":
             await self._handle_top_command(guild_id, user_id, channel, message)
         elif content == "wordle global":
@@ -79,11 +93,9 @@ class DiscordWordleBot:
     async def _handle_new_wordle_command(self, content, guild_id, user_id, channel, message_or_interaction):
         """Handle new wordle command"""
         # Parse difficulty
-        difficulty = "medium"
-        if content == "new wordle easy":
-            difficulty = "easy"
-        elif content == "new wordle medium":
-            difficulty = "medium"
+        difficulty = "normal"
+        if content == "new wordle normal":
+            difficulty = "normal"
         elif content == "new wordle hard":
             difficulty = "hard"
         
@@ -108,7 +120,7 @@ class DiscordWordleBot:
         if difficulty == "hard":
             start_message = "A new wordle game has started. Type `guess {your guess}` to start playing! Since you're playing hard mode, you can only guess the word in 6 tries, and any revealed hints must be used in subsequent guesses!"
         else:
-            start_message = "A new wordle game has started. Type `guess {your guess}` to start playing!"
+            start_message = "A new wordle game has started. Type `guess {your guess}` to start playing! Normal mode: unlimited guesses, but you lose 2 points for each guess beyond the first (minimum 0 points)."
         
         await self._send_response(channel, start_message, message_or_interaction)
 
@@ -237,7 +249,7 @@ class DiscordWordleBot:
             keyboard_display = WordleGame.format_keyboard_display(game_state.get_keyboard_state())
             fallback_embed = discord.Embed(
                 title="Wordle Status",
-                color=discord.Color.blue(),
+                color=discord.Color.green(),
                 description=description,
             )
             fallback_embed.add_field(
@@ -258,8 +270,64 @@ class DiscordWordleBot:
     async def _handle_points_command(self, guild_id, user_id, channel, message_or_interaction=None):
         """Handle wordle points command"""
         score_data = storage.get_user_score(guild_id, user_id)
-        points = score_data["points"]
-        await self._send_response(channel, f"You have {points} points!", message_or_interaction)
+        points = score_data.get("points", 0)
+        
+        # Check if we're showing someone else's points (via mention)
+        if hasattr(message_or_interaction, 'mentions') and message_or_interaction.mentions:
+            target_user = message_or_interaction.mentions[0]
+            response = f"{target_user.display_name} has {points} points!"
+        else:
+            response = f"You have {points} points!"
+            
+        await self._send_response(channel, response, message_or_interaction)
+
+    async def _handle_statistics_command(self, guild_id, user_id, channel, message_or_interaction=None):
+        """Handle wordle statistics command"""
+        score_data = storage.get_user_score(guild_id, user_id)
+
+        points = score_data.get("points", 0)
+        total_correct_guesses = score_data.get("gamesWon", 0)  # games won = correct words
+        total_guesses = score_data.get("totalGuesses", 0)
+        first_attempt_guesses = score_data.get("firstAttemptGuesses", 0)
+
+        if total_correct_guesses > 0:
+            avg_guesses = total_guesses / total_correct_guesses
+        else:
+            avg_guesses = 0.0
+
+        # Figure out display name
+        display_name = "Unknown"
+        user = None
+        if hasattr(message_or_interaction, "author"):
+            user = message_or_interaction.author
+        elif hasattr(message_or_interaction, "user"):
+            user = message_or_interaction.user
+
+        if user is not None:
+            display_name = user.display_name or user.name
+
+        embed = discord.Embed(
+            title=f"Wordle Statistics for {display_name}",
+            color=discord.Color.green(),
+        )
+
+        embed.description = (
+            f"• Points: {points}\n"
+            f"• Total Guesses: {total_guesses}\n"
+            f"• Total Correct Guesses: {total_correct_guesses}\n"
+            f"• Average Guesses per Correct Word: {avg_guesses:.2f}\n"
+            f"• First Attempt Guesses: {first_attempt_guesses}"
+        )
+
+        embed.set_footer(
+            text="Wordle Corner (Powered by abuhaidar) © 2025 - Version: 1.0.0"
+        )
+
+        await self._send_response(
+            channel,
+            embed=embed,
+            message_or_interaction=message_or_interaction,
+        )
 
     async def _handle_top_command(self, guild_id, user_id, channel, message_or_interaction):
         """Handle wordle top command (server members with global scores)"""
@@ -292,7 +360,7 @@ class DiscordWordleBot:
         # Create embed
         embed = discord.Embed(
             title=f"🏆 Top Wordle Players in {guild.name}",
-            color=discord.Color.gold()
+            color=discord.Color.green()
         )
         
         medals = ["🥇", "🥈", "🥉", "🌟", "⭐"]
@@ -328,7 +396,7 @@ class DiscordWordleBot:
         # Create embed
         embed = discord.Embed(
             title="🌍 Global Top Wordle Players",
-            color=discord.Color.purple()
+            color=discord.Color.green()
         )
         
         medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
@@ -379,19 +447,19 @@ class DiscordWordleBot:
         """Handle wordle help command"""
         embed = discord.Embed(
             title="Wordle Bot Commands",
-            color=discord.Color.blue(),
+            color=discord.Color.green(),
             description="Here are all the commands you can use to play Wordle:"
         )
 
         # Commands
         commands = """
-`new wordle` - Start a new Wordle game (medium difficulty)
-`new wordle easy` - Start with 8 guesses
-`new wordle medium` - Start with 6 guesses
+`new wordle` - Start a new Wordle game (normal difficulty)
+`new wordle normal` - Start with unlimited guesses, -2 points per guess after first
 `new wordle hard` - Start with 6 guesses + hard mode rules
 `guess <word>` - Make a guess (5-letter word)
 `wordle status` - Show current game status
 `wordle points` - Show your points
+`wordle statistics` - Show your detailed statistics
 `wordle top` - Show top players in this server
 `wordle global` - Show global top 10 players
 `wordle quit` - Quit the current game
@@ -554,14 +622,21 @@ class DiscordWordleBot:
 
             # Update user score
             current_score = storage.get_user_score(guild_id, user_id)
-            new_points = current_score["points"] + points_earned
-            new_games_won = current_score["gamesWon"] + 1
-            new_games_played = current_score["gamesPlayed"] + 1
+            new_points = current_score.get("points", 0) + points_earned
+            new_games_won = current_score.get("gamesWon", 0) + 1
+            new_games_played = current_score.get("gamesPlayed", 0) + 1
+
+            new_total_guesses = current_score.get("totalGuesses", 0) + guesses_used
+            new_first_attempt_guesses = current_score.get("firstAttemptGuesses", 0)
+            if guesses_used == 1:
+                new_first_attempt_guesses += 1
 
             new_score_data = {
                 "points": new_points,
                 "gamesWon": new_games_won,
                 "gamesPlayed": new_games_played,
+                "totalGuesses": new_total_guesses,
+                "firstAttemptGuesses": new_first_attempt_guesses,
             }
             storage.update_user_score(guild_id, user_id, new_score_data)
 
@@ -613,24 +688,20 @@ class DiscordWordleBot:
         else:
             # Loss: update only gamesPlayed
             current_score = storage.get_user_score(guild_id, user_id)
-            new_games_played = current_score["gamesPlayed"] + 1
+            new_games_played = current_score.get("gamesPlayed", 0) + 1
 
             new_score_data = {
-                "points": current_score["points"],
-                "gamesWon": current_score["gamesWon"],
+                "points": current_score.get("points", 0),
+                "gamesWon": current_score.get("gamesWon", 0),
                 "gamesPlayed": new_games_played,
+                "totalGuesses": current_score.get("totalGuesses", 0),
+                "firstAttemptGuesses": current_score.get("firstAttemptGuesses", 0),
             }
             storage.update_user_score(guild_id, user_id, new_score_data)
 
-            image_path = None
-            try:
-                # Generate single word image showing the answer as all green
-                statuses = ["green"] * len(answer)
-                image_path = image_generator.generate_guess_image(answer, statuses)
-                with open(image_path, "rb") as f:
-                    picture = discord.File(f, filename="wordle_final.png")
-
-                loss_message = f"😞 Game over! The word was **{answer.upper()}**."
+            # Custom handling for hard mode losses (no image)
+            if game_state.difficulty == "hard":
+                loss_message = f"RIP - Since this was hard mode, you only get 6 tries to guess the word! The correct word was: **{answer.upper()}**"
                 dict_url = f"https://www.merriam-webster.com/dictionary/{answer}"
 
                 view = discord.ui.View()
@@ -642,18 +713,42 @@ class DiscordWordleBot:
                     )
                 )
 
-                # Send text message with photo and button (no embed)
-                await channel.send(loss_message, file=picture, view=view)
+                # Send text message with button only (no image)
+                await channel.send(loss_message, view=view)
+            else:
+                # Normal mode losses still use image
+                image_path = None
+                try:
+                    # Generate single word image showing the answer as all green
+                    statuses = ["green"] * len(answer)
+                    image_path = image_generator.generate_guess_image(answer, statuses)
+                    with open(image_path, "rb") as f:
+                        picture = discord.File(f, filename="wordle_final.png")
 
-            except Exception as e:
-                print(f"Final guess image generation failed (loss): {e}")
-                dict_url = f"https://www.merriam-webster.com/dictionary/{answer}"
-                loss_message = f"😞 Game over! The word was **{answer.upper()}**."
-                loss_message += f"\n\nDictionary: {dict_url}"
-                await channel.send(loss_message)
-            finally:
-                if image_path and os.path.exists(image_path):
-                    asyncio.create_task(self._delete_image_after_delay(image_path, 600))  # 600 seconds = 10 minutes
+                    loss_message = f"😞 Game over! The word was **{answer.upper()}**."
+                    dict_url = f"https://www.merriam-webster.com/dictionary/{answer}"
+
+                    view = discord.ui.View()
+                    view.add_item(
+                        discord.ui.Button(
+                            label="Dictionary",
+                            style=discord.ButtonStyle.link,
+                            url=dict_url,
+                        )
+                    )
+
+                    # Send text message with photo and button (no embed)
+                    await channel.send(loss_message, file=picture, view=view)
+
+                except Exception as e:
+                    print(f"Final guess image generation failed (loss): {e}")
+                    dict_url = f"https://www.merriam-webster.com/dictionary/{answer}"
+                    loss_message = f"😞 Game over! The word was **{answer.upper()}**."
+                    loss_message += f"\n\nDictionary: {dict_url}"
+                    await channel.send(loss_message)
+                finally:
+                    if image_path and os.path.exists(image_path):
+                        asyncio.create_task(self._delete_image_after_delay(image_path, 600))  # 600 seconds = 10 minutes
 
         # Remove the completed game from storage
         storage.delete_channel_game(guild_id, channel.id)
