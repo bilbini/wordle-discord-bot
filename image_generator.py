@@ -29,11 +29,21 @@ class WordleImageGenerator:
 
         self.images_dir = "wordle_images"
         os.makedirs(self.images_dir, exist_ok=True)
+        
+        # Font cache to avoid reloading fonts repeatedly
+        self._font_cache = {}
 
     # ------------------------------------------------------------------ helpers
 
     def _get_font(self, size: int, bold: bool = False):
         """Load a real TTF font; fall back with a visible warning."""
+        # Create a cache key based on size and bold
+        cache_key = f"{size}_{bold}"
+        
+        # Return cached font if available
+        if cache_key in self._font_cache:
+            return self._font_cache[cache_key]
+        
         base_dir = os.path.dirname(os.path.abspath(__file__))
         font_dir = os.path.join(base_dir, "fonts")
 
@@ -42,10 +52,16 @@ class WordleImageGenerator:
 
         try:
             print("Loading font:", font_path, "size:", size)
-            return ImageFont.truetype(font_path, size)
+            font = ImageFont.truetype(font_path, size)
+            # Cache the font for future use
+            self._font_cache[cache_key] = font
+            return font
         except Exception as e:
             print("Falling back to default font:", e)
-            return ImageFont.load_default()
+            font = ImageFont.load_default()
+            # Cache the default font too
+            self._font_cache[cache_key] = font
+            return font
 
 
     def _normalize_status(self, status: str) -> str:
@@ -270,12 +286,15 @@ class WordleImageGenerator:
 
                 if status == "green":
                     fill = self.colors["green"]
+                    text_color = self.colors["white"]  # White text on green
                 elif status in ("grey", "yellow"):
                     # We only want grey here, no yellow color on the keyboard
                     fill = self.colors["grey"]
+                    text_color = self.colors["white"]  # White text on grey
                 else:
                     # Non-used letters -> white background
                     fill = self.colors["white"]
+                    text_color = self.colors["bg"]  # Black text on white
 
                 # Draw key rectangle
                 draw.rounded_rectangle(
@@ -294,7 +313,7 @@ class WordleImageGenerator:
                         (cx, cy),
                         letter,
                         font=font,
-                        fill=self.colors["bg"],
+                        fill=text_color,
                         anchor="mm",
                     )
                 except TypeError:
@@ -304,7 +323,7 @@ class WordleImageGenerator:
                     th = bbox[3] - bbox[1]
                     tx = x0 + (key_width - tw) // 2
                     ty = y0 + (key_height - th) // 2
-                    draw.text((tx, ty), letter, font=font, fill=self.colors["bg"])
+                    draw.text((tx, ty), letter, font=font, fill=text_color)
 
         if not filename:
             filename = f"wordle_keyboard_{random.randint(1000, 9999)}.png"

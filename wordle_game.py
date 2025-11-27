@@ -87,14 +87,10 @@ class GameState:
                 if guess[i] != required_letter:
                     return f"Hard mode: position {i+1} must be '{required_letter.upper()}'"
         
-        # Check yellow constraints
+        # Check yellow constraints - require the letter to be present somewhere
         for letter, forbidden_positions in self.yellow_constraints.items():
             if letter not in guess:
                 return f"Hard mode: must use '{letter.upper()}' from previous guesses"
-            
-            for pos in forbidden_positions:
-                if guess[pos] == letter:
-                    return f"Hard mode: '{letter.upper()}' cannot be in position {pos+1}"
         
         return ""
 
@@ -230,8 +226,13 @@ class GameState:
             game_state.guess_results.append(result)
         
         # Restore constraints
-        game_state.green_constraints = game_dict["green_constraints"].copy()
-        game_state.yellow_constraints = {k: v.copy() for k, v in game_dict["yellow_constraints"].items()}
+        raw_green = game_dict.get("green_constraints", {})
+        # Convert JSON string keys ("0", "1", ...) back to ints
+        game_state.green_constraints = {int(k): v for k, v in raw_green.items()}
+
+        raw_yellow = game_dict.get("yellow_constraints", {})
+        game_state.yellow_constraints = {k: v.copy() for k, v in raw_yellow.items()}
+
         
         return game_state
 
@@ -261,6 +262,19 @@ class WordleGame:
     @staticmethod
     def calculate_points(difficulty, guesses_used):
         """Calculate points for a completed game"""
+        # Special scoring for hard mode
+        if difficulty == "hard":
+            hard_mode_points = {
+                1: 20,
+                2: 18,
+                3: 16,
+                4: 14,
+                5: 12,
+                6: 10
+            }
+            return hard_mode_points.get(guesses_used, 0)
+        
+        # Original scoring for easy and medium modes
         base_points = WordleGame._get_base_points(difficulty)
         max_guesses = WordleGame._get_max_guesses(difficulty)
         bonus_points = max_guesses - guesses_used

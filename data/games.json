@@ -31,6 +31,40 @@
         "is_finished": false,
         "error": ""
       }
-    ]
+    ],
+    "1443111465182564425": {
+      "answer": "miner",
+      "difficulty": "hard",
+      "maxGuesses": 6,
+      "guesses": [
+        "alone"
+      ],
+      "channel_id": "1443111465182564425",
+      "created_at": 1764269717.275275,
+      "is_hard_mode": true,
+      "green_constraints": {},
+      "yellow_constraints": {
+        "n": [
+          3
+        ],
+        "e": [
+          4
+        ]
+      },
+      "guess_results": [
+        {
+          "statuses": [
+            "grey",
+            "grey",
+            "grey",
+            "yellow",
+            "yellow"
+          ],
+          "is_correct": false,
+          "is_finished": false,
+          "error": ""
+        }
+      ]
+    }
   }
 }

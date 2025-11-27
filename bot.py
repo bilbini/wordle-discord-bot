@@ -1,6 +1,7 @@
 # bot.py
 
 import os
+import asyncio
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
@@ -17,14 +18,13 @@ class DiscordWordleBot:
         intents = discord.Intents.default()
         intents.message_content = True
         
-        # Create bot instance with slash commands
+        # Create bot instance
         self.bot = commands.Bot(command_prefix="", intents=intents)
         self.token = os.getenv("DISCORD_TOKEN")
         self.letter_emojis = {}  # name -> discord.Emoji
         
-        # Register event handlers and slash commands
+        # Register event handlers
         self._register_handlers()
-        self._register_slash_commands()
 
     def _register_handlers(self):
         """Register Discord event handlers"""
@@ -32,114 +32,13 @@ class DiscordWordleBot:
         @self.bot.event
         async def on_ready():
             print(f"Logged in as {self.bot.user}")
-            
-            # Sync slash commands to all guilds
-            try:
-                synced = await self.bot.tree.sync()
-                print(f"Synced {len(synced)} slash commands globally")
-                
-                # Also sync to each guild for faster availability
-                for guild in self.bot.guilds:
-                    await self.bot.tree.sync(guild=guild)
-                    print(f"Synced commands to guild: {guild.name}")
-                    
-            except Exception as e:
-                print(f"Failed to sync commands: {e}")
-            
-            print("Slash commands are ready!")
             self._build_letter_emoji_cache()
-        
-        @self.bot.event
-        async def on_guild_join(guild):
-            """Sync commands when bot joins a new guild"""
-            try:
-                await self.bot.tree.sync(guild=guild)
-                print(f"Synced commands to new guild: {guild.name}")
-            except Exception as e:
-                print(f"Failed to sync commands to new guild {guild.name}: {e}")
+            print("Bot is ready!")
         
         @self.bot.event
         async def on_message(message):
             await self._handle_message(message)
 
-    def _register_slash_commands(self):
-        """Register slash commands"""
-        
-        @self.bot.tree.command(name="wordle", description="Wordle game commands")
-        async def wordle(interaction: discord.Interaction):
-            """Main wordle command group - just show help"""
-            await interaction.response.send_message(
-                "Use `/wordle-new` to start a game, `/wordle-guess` to guess, or `/wordle-help` for all commands.",
-                ephemeral=True
-            )
-        
-        @self.bot.tree.command(name="wordle-new", description="Start a new Wordle game")
-        @discord.app_commands.choices(difficulty=[
-            discord.app_commands.Choice(name="Easy (8 guesses)", value="easy"),
-            discord.app_commands.Choice(name="Medium (6 guesses)", value="medium"),
-            discord.app_commands.Choice(name="Hard (6 guesses + hard mode)", value="hard")
-        ])
-        async def wordle_new(interaction: discord.Interaction, difficulty: discord.app_commands.Choice[str] = None):
-            """Start a new Wordle game with optional difficulty"""
-            guild_id = str(interaction.guild.id)
-            user_id = str(interaction.user.id)
-            channel = interaction.channel
-            
-            # Use medium as default if no difficulty provided
-            difficulty_value = difficulty.value if difficulty else "medium"
-            
-            await self._handle_new_wordle_command(f"new wordle {difficulty_value}", guild_id, user_id, channel, interaction)
-        
-        @self.bot.tree.command(name="wordle-guess", description="Make a Wordle guess")
-        async def wordle_guess(interaction: discord.Interaction, word: str):
-            """Make a guess in the current Wordle game"""
-            guild_id = str(interaction.guild.id)
-            user_id = str(interaction.user.id)
-            channel = interaction.channel
-            
-            # Validate word length
-            if len(word) != 5 or not word.isalpha():
-                await interaction.response.send_message("Guess must be exactly 5 letters and contain only letters.", ephemeral=True)
-                return
-            
-            await self._handle_guess(word.lower(), guild_id, user_id, channel, interaction)
-        
-        @self.bot.tree.command(name="wordle-status", description="Show current Wordle game status")
-        async def wordle_status(interaction: discord.Interaction):
-            """Show the current Wordle game status"""
-            guild_id = str(interaction.guild.id)
-            channel = interaction.channel
-            await self._handle_status_command(guild_id, channel, interaction)
-        
-        @self.bot.tree.command(name="wordle-points", description="Show your Wordle points")
-        async def wordle_points(interaction: discord.Interaction):
-            """Show your Wordle points"""
-            guild_id = str(interaction.guild.id)
-            user_id = str(interaction.user.id)
-            channel = interaction.channel
-            await self._handle_points_command(guild_id, user_id, channel, interaction)
-        
-        @self.bot.tree.command(name="wordle-top", description="Show top Wordle players in this server")
-        async def wordle_top(interaction: discord.Interaction):
-            """Show top Wordle players"""
-            guild_id = str(interaction.guild.id)
-            user_id = str(interaction.user.id)
-            channel = interaction.channel
-            await self._handle_top_command(guild_id, user_id, channel, interaction)
-        
-        @self.bot.tree.command(name="wordle-quit", description="Quit the current Wordle game")
-        async def wordle_quit(interaction: discord.Interaction):
-            """Quit the current Wordle game"""
-            guild_id = str(interaction.guild.id)
-            user_id = str(interaction.user.id)
-            channel = interaction.channel
-            await self._handle_quit_command(guild_id, user_id, channel, interaction)
-        
-        @self.bot.tree.command(name="wordle-help", description="Show Wordle help and commands")
-        async def wordle_help(interaction: discord.Interaction):
-            """Show Wordle help"""
-            channel = interaction.channel
-            await self._handle_help_command(channel, interaction)
 
     async def _handle_message(self, message):
         """Handle incoming messages"""
@@ -161,6 +60,8 @@ class DiscordWordleBot:
             await self._handle_points_command(guild_id, user_id, channel)
         elif content == "wordle top":
             await self._handle_top_command(guild_id, user_id, channel, message)
+        elif content == "wordle global":
+            await self._handle_global_command(guild_id, user_id, channel, message)
         elif content == "wordle quit":
             await self._handle_quit_command(guild_id, user_id, channel)
         elif content == "wordle help":
@@ -172,8 +73,8 @@ class DiscordWordleBot:
                 if len(guess_word) == 5 and guess_word.isalpha():
                     await self._handle_guess(guess_word, guild_id, user_id, channel)
         
-        # Process other commands
-        await self.bot.process_commands(message)
+        # Don't process commands again to avoid duplicate responses
+        # await self.bot.process_commands(message)  # Removed to prevent duplicate messages
 
     async def _handle_new_wordle_command(self, content, guild_id, user_id, channel, message_or_interaction):
         """Handle new wordle command"""
@@ -321,7 +222,7 @@ class DiscordWordleBot:
             )
             embed.set_image(url="attachment://wordle_keyboard.png")
             embed.set_footer(
-                text="Wafflers Remastered (powered by Mafia Remastered) © 2025 – Version: 2.3.0"
+                text="Wordle Corner (powered by abuhaidar) © 2025 – Version: 1.0.0"
             )
 
             if hasattr(message_or_interaction, "response") and hasattr(message_or_interaction.response, "send_message"):
@@ -352,10 +253,7 @@ class DiscordWordleBot:
 
         finally:
             if image_path and os.path.exists(image_path):
-                try:
-                    os.remove(image_path)
-                except Exception as e:
-                    print(f"Failed to delete status image file {image_path}: {e}")
+                asyncio.create_task(self._delete_image_after_delay(image_path, 600))  # 600 seconds = 10 minutes
 
     async def _handle_points_command(self, guild_id, user_id, channel, message_or_interaction=None):
         """Handle wordle points command"""
@@ -364,23 +262,36 @@ class DiscordWordleBot:
         await self._send_response(channel, f"You have {points} points!", message_or_interaction)
 
     async def _handle_top_command(self, guild_id, user_id, channel, message_or_interaction):
-        """Handle wordle top command"""
-        top_players = storage.get_top_players(guild_id, 5)
+        """Handle wordle top command (server members with global scores)"""
+        # Get all global players
+        all_global_players = storage.get_global_top_players(limit=None)
         
-        if len(top_players) == 0:
-            await self._send_response(channel, "No one has any Wordle points yet. Solve a puzzle to get on the board!", message_or_interaction)
-            return
-        
-        # Get guild name
+        # Get guild object
         guild = None
         if hasattr(message_or_interaction, 'guild'):
             guild = message_or_interaction.guild
         else:
             guild = channel.guild
         
+        # Filter to only include members who are in this server
+        server_members_with_scores = []
+        for player in all_global_players:
+            user_id_str = player["user_id"]
+            # Check if this user is a member of the current server
+            user = guild.get_member(int(user_id_str))
+            if user:  # User is in this server
+                server_members_with_scores.append(player)
+        
+        # Take top 5 server members by global score
+        top_players = server_members_with_scores[:5]
+        
+        if len(top_players) == 0:
+            await self._send_response(channel, "No one in this server has any Wordle points yet. Solve a puzzle to get on the board!", message_or_interaction)
+            return
+        
         # Create embed
         embed = discord.Embed(
-            title=f"Top Wordle Players in {guild.name}",
+            title=f"🏆 Top Wordle Players in {guild.name}",
             color=discord.Color.gold()
         )
         
@@ -392,13 +303,60 @@ class DiscordWordleBot:
             points = player["points"]
             medal = medals[i]
             
-            # Get user mention
+            # Get user mention (we know they're in the server from our filter)
             user = guild.get_member(int(user_id_str))
             user_mention = user.mention if user else f"<@{user_id_str}>"
             
-            description += f"{medal} {user_mention} – {points} points\n"
+            description += f"{medal} {user_mention} – **{points:,}** points\n"
+            
+            # Add extra spacing between entries (like <br>)
+            if i < len(top_players) - 1:
+                description += "\n"
         
         embed.description = description
+        embed.set_footer(text="Showing global scores of server members")
+        await self._send_response(channel, embed=embed, message_or_interaction=message_or_interaction)
+
+    async def _handle_global_command(self, guild_id, user_id, channel, message_or_interaction):
+        """Handle wordle global command (global leaderboard)"""
+        top_players = storage.get_global_top_players(10)
+        
+        if len(top_players) == 0:
+            await self._send_response(channel, "No one has any Wordle points yet globally. Solve a puzzle to get on the board!", message_or_interaction)
+            return
+        
+        # Create embed
+        embed = discord.Embed(
+            title="🌍 Global Top Wordle Players",
+            color=discord.Color.purple()
+        )
+        
+        medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+        description = ""
+        
+        for i, player in enumerate(top_players):
+            user_id_str = player["user_id"]
+            points = player["points"]
+            medal = medals[i]
+            
+            # Get user mention - try to find user in current guild first
+            guild = None
+            if hasattr(message_or_interaction, 'guild'):
+                guild = message_or_interaction.guild
+            else:
+                guild = channel.guild
+            
+            user = guild.get_member(int(user_id_str))
+            user_mention = user.mention if user else f"<@{user_id_str}>"
+            
+            description += f"{medal} {user_mention} – **{points:,}** points\n"
+            
+            # Add extra spacing between entries (like <br>)
+            if i < len(top_players) - 1:
+                description += "\n"
+        
+        embed.description = description
+        embed.set_footer(text="Global leaderboard across all servers")
         await self._send_response(channel, embed=embed, message_or_interaction=message_or_interaction)
 
     async def _handle_quit_command(self, guild_id, user_id, channel, message_or_interaction=None):
@@ -425,8 +383,8 @@ class DiscordWordleBot:
             description="Here are all the commands you can use to play Wordle:"
         )
 
-        # Text Commands
-        text_commands = """
+        # Commands
+        commands = """
 `new wordle` - Start a new Wordle game (medium difficulty)
 `new wordle easy` - Start with 8 guesses
 `new wordle medium` - Start with 6 guesses
@@ -435,22 +393,11 @@ class DiscordWordleBot:
 `wordle status` - Show current game status
 `wordle points` - Show your points
 `wordle top` - Show top players in this server
+`wordle global` - Show global top 10 players
 `wordle quit` - Quit the current game
 `wordle help` - Show this help message
 """
-        embed.add_field(name="Text Commands", value=text_commands, inline=False)
-
-        # Slash Commands
-        slash_commands = """
-`/wordle-new` - Start a new Wordle game with difficulty selection
-`/wordle-guess <word>` - Make a guess (5-letter word)
-`/wordle-status` - Show current game status
-`/wordle-points` - Show your points
-`/wordle-top` - Show top players in this server
-`/wordle-quit` - Quit the current game
-`/wordle-help` - Show this help message
-"""
-        embed.add_field(name="Slash Commands", value=slash_commands, inline=False)
+        embed.add_field(name="Commands", value=commands, inline=False)
 
         # Game Rules
         game_rules = """
@@ -462,7 +409,7 @@ class DiscordWordleBot:
 """
         embed.add_field(name="Game Rules", value=game_rules, inline=False)
 
-        embed.set_footer(text="Wafflers Remastered (powered by Mafia Remastered) © 2025 – Version: 2.3.0")
+        embed.set_footer(text="Wordle Corner (powered by abuhaidar) © 2025 – Version: 1.0.0")
 
         await self._send_response(channel, embed=embed, message_or_interaction=message_or_interaction)
 
@@ -528,16 +475,23 @@ class DiscordWordleBot:
             guess_display = WordleGame.format_guess_display(guess, result.statuses)
             await channel.send(guess_display)
         finally:
-            # Clean up the image file after sending
+            # Clean up the image file after 10 minutes
             if image_path and os.path.exists(image_path):
-                try:
-                    os.remove(image_path)
-                except Exception as e:
-                    print(f"Failed to delete image file {image_path}: {e}")
+                asyncio.create_task(self._delete_image_after_delay(image_path, 600))  # 600 seconds = 10 minutes
 
         # If the game is finished (loss or max guesses), show final history
         if result.is_finished:
             await self._handle_game_completion(game_state, guild_id, user_id, channel, result.is_correct)
+
+    async def _delete_image_after_delay(self, image_path, delay_seconds):
+        """Delete image file after specified delay"""
+        await asyncio.sleep(delay_seconds)
+        try:
+            if os.path.exists(image_path):
+                os.remove(image_path)
+                print(f"Deleted image file after delay: {image_path}")
+        except Exception as e:
+            print(f"Failed to delete image file {image_path}: {e}")
 
     def _build_letter_emoji_cache(self):
         """
@@ -654,10 +608,7 @@ class DiscordWordleBot:
                 await channel.send(win_message)
             finally:
                 if image_path and os.path.exists(image_path):
-                    try:
-                        os.remove(image_path)
-                    except Exception as e:
-                        print(f"Failed to delete image file {image_path}: {e}")
+                    asyncio.create_task(self._delete_image_after_delay(image_path, 600))  # 600 seconds = 10 minutes
 
         else:
             # Loss: update only gamesPlayed
@@ -702,10 +653,7 @@ class DiscordWordleBot:
                 await channel.send(loss_message)
             finally:
                 if image_path and os.path.exists(image_path):
-                    try:
-                        os.remove(image_path)
-                    except Exception as e:
-                        print(f"Failed to delete image file {image_path}: {e}")
+                    asyncio.create_task(self._delete_image_after_delay(image_path, 600))  # 600 seconds = 10 minutes
 
         # Remove the completed game from storage
         storage.delete_channel_game(guild_id, channel.id)

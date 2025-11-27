@@ -58,38 +58,32 @@ class Storage:
     def get_user_score(self, guild_id, user_id):
         """Get user score data, return default if not exists"""
         scores = self.load_scores()
-        
-        guild_id_str = str(guild_id)
         user_id_str = str(user_id)
         
-        if guild_id_str not in scores:
-            return {
-                "points": 0,
-                "gamesWon": 0,
-                "gamesPlayed": 0
-            }
+        # Global scores - ignore guild_id
+        for guild_id_str, guild_scores in scores.items():
+            if user_id_str in guild_scores:
+                return guild_scores[user_id_str]
         
-        guild_scores = scores[guild_id_str]
-        if user_id_str not in guild_scores:
-            return {
-                "points": 0,
-                "gamesWon": 0,
-                "gamesPlayed": 0
-            }
-        
-        return guild_scores[user_id_str]
+        # User not found in any guild
+        return {
+            "points": 0,
+            "gamesWon": 0,
+            "gamesPlayed": 0
+        }
 
     def update_user_score(self, guild_id, user_id, score_data):
-        """Update user score data"""
+        """Update user score data (global scores)"""
         scores = self.load_scores()
-        
-        guild_id_str = str(guild_id)
         user_id_str = str(user_id)
         
-        if guild_id_str not in scores:
-            scores[guild_id_str] = {}
+        # Use a global guild ID for all scores
+        global_guild_id = "global"
+        if global_guild_id not in scores:
+            scores[global_guild_id] = {}
         
-        scores[guild_id_str][user_id_str] = score_data
+        # Update or create user score in global section
+        scores[global_guild_id][user_id_str] = score_data
         self.save_scores(scores)
 
     def get_channel_game(self, guild_id, channel_id):
@@ -147,30 +141,49 @@ class Storage:
         # We can't delete all channel games without knowing which ones
         pass
 
-    def get_top_players(self, guild_id, limit=5):
-        """Get top players for a guild"""
+    def get_top_players_in_guild(self, guild_id, limit=5):
+        """Get top players for a specific guild"""
         scores = self.load_scores()
         guild_id_str = str(guild_id)
-        
-        if guild_id_str not in scores:
-            return []
-        
-        guild_scores = scores[guild_id_str]
         players = []
         
-        for user_id, score_data in guild_scores.items():
-            player_data = {
-                "user_id": user_id,
-                "points": score_data["points"],
-                "gamesWon": score_data["gamesWon"],
-                "gamesPlayed": score_data["gamesPlayed"]
-            }
-            players.append(player_data)
+        if guild_id_str in scores:
+            guild_scores = scores[guild_id_str]
+            for user_id, score_data in guild_scores.items():
+                players.append({
+                    "user_id": user_id,
+                    "points": score_data["points"],
+                    "gamesWon": score_data["gamesWon"],
+                    "gamesPlayed": score_data["gamesPlayed"]
+                })
         
         # Sort by points descending
         sorted_players = sorted(players, key=lambda x: x["points"], reverse=True)
         
         # Return top N players
+        return sorted_players[:limit]
+
+    def get_global_top_players(self, limit=10):
+        """Get top players globally across all guilds"""
+        scores = self.load_scores()
+        players = []
+        
+        # Aggregate all players from all guilds
+        for guild_id_str, guild_scores in scores.items():
+            for user_id, score_data in guild_scores.items():
+                players.append({
+                    "user_id": user_id,
+                    "points": score_data["points"],
+                    "gamesWon": score_data["gamesWon"],
+                    "gamesPlayed": score_data["gamesPlayed"]
+                })
+        
+        # Sort by points descending
+        sorted_players = sorted(players, key=lambda x: x["points"], reverse=True)
+        
+        # Return top N players, or all if limit is None
+        if limit is None:
+            return sorted_players
         return sorted_players[:limit]
 
 # Global instance
